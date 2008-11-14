@@ -1,0 +1,247 @@
+#!/usr/bin/env python
+#
+# Python script to remove spectral variation of a flat-field from Ultraspec by 
+# fitting splines or polynomials. This is done in the log to get roughly equal 
+# percentage variation. 
+#
+# snorm device nccd iname oname x1 x2 y1 y2 nspline
+#
+# device   --- plot device
+# nccd     --- CCD number to plot, starting from 1
+# iname    --- input ucm file name. Assumed to be debiassed.
+# oname    --- output ucm file name. 
+# x1, x2   --- OK X range (i.e. excluding over- or under-scan)
+# y1, y2   --- y range to extract to estimate spectral profile (integers, inclusive)
+# xf1, xf2 --- x range to fit splines over. Splines will be extrapolated linearly beyond this range.
+# ncoeff   --- number of splines or poly coefficients to use. < 0 for poly rather than spline
+# thresh   --- Reject threshold, multiple of RMS
+
+import sys
+import math
+import scipy.interpolate
+import numpy
+from ppgplot import *
+import trm.ucm
+
+# get inputs ... long and tedious ... needs replacing
+
+narg = 1
+if len(sys.argv) <= narg:
+    device = raw_input('device name: ')
+else:
+    device = sys.argv[narg]
+
+narg += 1
+if len(sys.argv) <= narg:
+    nccd = int(raw_input('CCD number to plot: '))
+else:
+    nccd = int(sys.argv[narg])
+
+if nccd < 1:
+    print 'Error: nccd < 1'
+    exit(1)
+
+narg += 1
+if len(sys.argv) <= narg:
+    iname = raw_input('input flatfield: ')
+else:
+    iname = sys.argv[narg]
+
+if not iname.endswith('.ucm'):
+    iname = iname + '.ucm'
+
+# read file
+iflat = trm.ucm.rucm(iname)
+if nccd > len(iflat.data):
+    print 'Error: only ' + str(len(iflat.data)) + ' CCDs found in ' + iname
+    exit(1)
+
+# convert to C-style 0-at-start
+nccd -= 1
+
+narg += 1
+if len(sys.argv) <= narg:
+    oname = raw_input('output normalised flatfield: ')
+else:
+    oname = sys.argv[narg]
+
+if not oname.endswith('.ucm'):
+    oname = oname + '.ucm'
+
+narg += 1
+if len(sys.argv) <= narg:
+    x1 = int(raw_input('left X limit: '))
+else:
+    x1 = int(sys.argv[narg])
+
+narg += 1
+if len(sys.argv) <= narg:
+    x2 = int(raw_input('right X limit: '))
+else:
+    x2 = int(sys.argv[narg])
+
+narg += 1
+if len(sys.argv) <= narg:
+    y1 = int(raw_input('bottom Y limit: '))
+else:
+    y1 = int(sys.argv[narg])
+
+narg += 1
+if len(sys.argv) <= narg:
+    y2 = int(raw_input('top Y limit: '))
+else:
+    y2 = int(sys.argv[narg])
+
+narg += 1
+if len(sys.argv) <= narg:
+    xf1 = int(raw_input('left X fit limit: '))
+else:
+    xf1 = int(sys.argv[narg])
+
+narg += 1
+if len(sys.argv) <= narg:
+    xf2 = int(raw_input('right X fit limit: '))
+else:
+    xf2 = int(sys.argv[narg])
+
+if xf1 < x1 or xf2 > x2:
+    print 'X fit limits must lie within OK X limits'
+    exit(1)
+
+narg += 1
+if len(sys.argv) <= narg:
+    ncoeff = int(raw_input('number of spline/poly coefficients (< 0 for poly): '))
+else:
+    ncoeff = int(sys.argv[narg])
+
+if ncoeff == 0:
+    print 'Cannot have 0 coefficients'
+    exit(1)
+
+fit_poly = ncoeff < 0
+ncoeff = abs(ncoeff)
+
+narg += 1
+if len(sys.argv) <= narg:
+    thresh = raw_input('rejection threshold [3.0]: ')
+    if thresh == '' or thresh.isspace():
+        thresh = 3.0
+    else:
+        thresh = float(thresh)
+else:
+    thresh = float(sys.argv[narg])
+
+if thresh <= 1.:
+    print 'Rejection threshold must be > 1'
+    exit(1)
+
+# work out if y range overlaps any windows
+covered = False
+for nw in range(len(iflat.data[nccd])):
+    if iflat.off[nccd][nw]['lly'] <= y1 and \
+            iflat.off[nccd][nw]['lly']+iflat.ybin*iflat.data[nccd][nw].shape[0]-1 >= y2:
+        ncover = nw
+        break
+else:
+    print 'No window found which covers extraction range ',y1,' to ',y2
+
+# extract
+sprof = iflat.data[nccd][ncover].mean(0)
+xprof = iflat.off[nccd][ncover]['llx'] + iflat.xbin*numpy.array(range(iflat.data[nccd][ncover].shape[1]),int)
+
+# take log over OK region
+ok = (xprof >= x1) & (xprof <= x2) 
+sprof[ok] = numpy.log(sprof[ok])
+
+# region of fit. fit stays the same. mask will have rejected points added
+fit  = (xprof >= xf1) & (xprof <= xf2)
+mask = (xprof >= xf1) & (xprof <= xf2)
+
+# carry out initial fit
+if fit_poly:
+    poly = scipy.polyfit(xprof[mask], sprof[mask], ncoeff-1)
+else:
+    # Regular grid of spline knots, chop off first point (so only interior)
+    knots = xf1 + (xf2-xf1)*numpy.array(range(ncoeff+1))/(ncoeff+1)
+    knots = knots[1:]
+    sp    = scipy.interpolate.splrep(xprof[mask], sprof[mask], task=-1, t=knots)
+
+sfit   = numpy.array(xprof,float)
+resid  = numpy.array(xprof,float)
+nrej   = 1
+ncycle = 0
+while nrej > 0:
+    if fit_poly:
+        sfit[mask] = scipy.polyval(poly, xprof[mask])
+    else:
+        sfit[mask] = scipy.interpolate.splev(xprof[mask], sp)
+    resid[mask] = abs(sprof[mask]-sfit[mask])
+    rms   = math.sqrt((resid[mask]*resid[mask]).mean())
+    nnok  = len(xprof[mask])
+    mask  = mask & (resid < thresh*rms)
+    nrej  = nnok - len(xprof[mask])
+    if nrej > 0:
+        if fit_poly:
+            poly = scipy.polyfit(xprof[mask], sprof[mask], ncoeff-1)
+        else:
+            sp   = scipy.interpolate.splrep(xprof[mask], sprof[mask], task=-1, t=knots)
+    ncycle += 1
+    print 'Cycle',ncycle,', RMS (before rejection) =',rms,', rejected',nrej
+
+# identify which were rejected
+rejected = fit & (mask == False)
+
+# Calculate values and derivatives at ends of fit region in 
+# order to extrapolate linearly beyond fit range
+if fit_poly:
+    sfit[fit] = scipy.polyval(poly, xprof[fit])
+    sder = numpy.array([[0.,0.],[0.,0.]])
+    sder[...,0] = scipy.polyval(poly, numpy.array([xf1,xf2]))
+    dpoly = poly[:-1]*(ncoeff-1-numpy.array(range(ncoeff-1)))
+    sder[...,1] = scipy.polyval(dpoly, numpy.array([xf1,xf2]))
+else:
+    sder = scipy.interpolate.spalde(numpy.array([xf1,xf2]), sp)
+    sfit[fit] = scipy.interpolate.splev(xprof[fit], sp)
+
+# linearly extrapolate
+sfit[xprof <= xf1] = sder[0][0] + sder[0][1]*(xprof[xprof <= xf1] - float(xf1))
+sfit[xprof >= xf2] = sder[1][0] + sder[1][1]*(xprof[xprof >= xf2] - float(xf2))
+
+# Plot data, fit and rejected points
+pgopen(device)
+x1 = xprof.min()
+x2 = xprof.max()
+y1 = min(sfit[ok].min(),sprof[ok].min())
+y2 = max(sfit[ok].min(),sprof[ok].max())
+xr = x2 - x1
+yr = y2 - y1
+x1 -= xr/20.
+x2 += xr/20.
+y1 -= yr/20.
+y2 += yr/20.
+pgenv(x1,x2,y1,y2,0,0)
+pglab('X pixels','ln(mean counts/pixel)',iname)
+pgsci(2)
+pgbin(xprof[ok], sprof[ok])
+pgsci(1)
+pgbin(xprof[fit], sprof[fit])
+pgsci(2)
+pgpt(xprof[rejected], sprof[rejected], 5)
+pgsci(3)
+pgline(xprof, sfit)
+pgclos()
+
+# Now normalise the frame
+sfit = numpy.exp(sfit)
+
+for nw in range(len(iflat.data[nccd])):
+    # get common x-range of window
+    xwprof = iflat.off[nccd][nw]['llx'] + iflat.xbin*numpy.array(range(iflat.data[nccd][nw].shape[1]),int)
+    x1 = max(iflat.off[nccd][nw]['llx'], int(xprof.min()))
+    x2 = min(iflat.off[nccd][nw]['llx'] + iflat.ybin*iflat.data[nccd][nw].shape[1] - 1,int(xprof.max()))
+
+    # normalise
+    iflat.data[nccd][nw][...,(xwprof >= x1) & (xwprof <= x2)] /= sfit[(xprof >= x1) & (xprof <= x2)]
+
+# write to disk
+iflat.write(oname)

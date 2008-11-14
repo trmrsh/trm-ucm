@@ -1,0 +1,61 @@
+#!/usr/bin/env python
+#
+# Python demonstration script to plot a ucm file using the trm.ucm module
+#
+# pucm device nccd uname
+#
+# device --- plot device
+# nccd   --- CCD number to plot, starting from 1
+# uname  --- ucm file name. '.ucm' will be added if not given.
+#
+# Scaling is from minimum to maximum
+
+import sys
+from ppgplot import *
+import trm.ucm
+
+# get inputs
+
+if len(sys.argv) < 2:
+    device = raw_input('device name: ')
+else:
+    device = sys.argv[1]
+
+if len(sys.argv) < 3:
+    nccd = int(raw_input('CCD number to plot: '))
+else:
+    nccd = int(sys.argv[2])
+
+if nccd < 1:
+    print 'Error: nccd < 1'
+    exit(1)
+
+if len(sys.argv) < 4:
+    fname = raw_input('ucm file to plot: ')
+else:
+    fname = sys.argv[3]
+
+if not fname.endswith('.ucm'):
+    fname = fname + '.ucm'
+
+# read file
+ucm = trm.ucm.rucm(fname)
+if nccd > len(ucm.data):
+    print 'Error: only ' + str(len(ucm.data)) + ' CCDs found in ' + fname
+    exit(1)
+
+# convert to C-style 0-at-start
+nccd -= 1
+
+# plot
+pgopen(device)
+pgvstd()
+pgwnad(0.5,ucm.nxtot+0.5,0.5,ucm.nytot+0.5)
+ucm.pggray(nccd, ucm.max(nccd), ucm.min(nccd))
+pgbox('bcnst',0.,0,'bcnst',0.,0)
+pglab('X pixels','Y pixels',fname)
+pgclos()
+
+
+
+

@@ -1,0 +1,29 @@
+
+'trm.ucm' is a Python module for reading and writing Ultracam
+ucm files to allow access to the guts of Ultracam files via Python.
+
+Look in 'scripts' for some example scripts. This is an early version 
+and there may well be changes in the future, in particular to the 
+currently crude way the headers are handled.
+
+Installation:
+
+As well as standard Python, you need 'numpy' (http://numpy.scipy.org/),  
+'scipy' (http://www.scipy.org/) and 'ppgplot'. The last one seems difficult 
+to get hold of so I have made copy available which can be downloaded from
+http://deneb.astro.warwick.ac.uk/phsaap/software/ppgplot-0.99.tar.gz
+
+Look out for rpms or equivalent for 'numpy' and 'scipy'; on SuSe linux
+installation of scipy was not entirely straightforward so pre-packaged
+installations for your system might help.
+
+
+Once everything is ready installation in the usual
+
+python setup.py install --prefix=your_top_levl_installation_directory
+
+
+Tom Marsh
+
+
+
