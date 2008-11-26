@@ -9,7 +9,7 @@ import numpy
 
 setup(name='trm.ucm',
       namespace_packages = ['trm'],
-      version='0.1',
+      version='0.2',
       package_dir = {'trm.ucm' : os.path.join('trm', 'ucm')},
       packages = find_packages(),
       scripts=['scripts/pucm', 'scripts/snorm'],

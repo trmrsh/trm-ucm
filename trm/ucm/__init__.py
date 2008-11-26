@@ -8,18 +8,32 @@ import sys
 import struct
 import numpy
 import ppgplot
+import trm.subs as subs
 
-class Ucm(list):
+class Ucm(subs.Odict):
 
     """
     Represents a Ucm file.
 
-    Ucm is a sub-class of list, and printing it will return the complete ucm header.
+    Ucm is a sub-class of an Odict (ordered dictionary). The Odict is used to store
+    the header while extra attributes store the data in numpy 2D arrays. The Odict is keyed
+    on the header item name with '.' used to descend into directory hierarchys. So for instance,
+    if you read a file as follows:
 
-    Has the following attributes:
+    flat = trm.ucm.rucm('flat.ucm')
+    
+    then
+
+    flat['Site.Observatory'['value']
+
+    will return the observatory name.
+
+    Ucm objects have the following attributes:
+
     data  -- the data. data[nc][nw] is a 2D numpy array representing window nw of CCD nc (both starting
              from zero, C-style).
-    off   -- window offsets. off[nc][nw] returns a dictionary of lower left pixel positions.
+    off   -- window offsets. off[nc][nw] returns a tuple (llx,lly) representing the lower-left pixel position.
+             of the respective window.
     xbin  -- X binning factor
     ybin  -- Y binning factor
     nxtot -- maximum X pixel
@@ -34,8 +48,7 @@ class Ucm(list):
                  {'name' : name, 'value' : value, 'comment' : comment, 'type' : itype}
         data  -- list of list of numpy 2D arrays so that data[nc][nw] represents
                  window nw of CCD nc
-        off   -- list of list of dictionaries such that off[nc][nw] has the form
-                 {'llx' : llx, 'lly' : lly}
+        off   -- list of list of tuples such that off[nc][nw] has the form (llx,lly)
         xbin  -- x binning factor
         ybin  -- y binning factor
         nxtot -- maximum X dimension
@@ -67,22 +80,23 @@ class Ucm(list):
         magic = 47561009
         uf.write(struct.pack('i',magic))
 
-# write the header
+# write the header, starting with the number of entries
         lmap = len(self)
         uf.write(struct.pack('i',lmap))
 
-        for i in xrange(lmap):
-            write_binary_string(uf, self[i]['name'])
-            itype = self[i]['type']
+        for (key,val) in self.iteritems():
+
+            write_binary_string(uf, key)
+            itype = val['type']
             uf.write(struct.pack('i',itype))
-            write_binary_string(uf, self[i]['comment'])
+            write_binary_string(uf, val['comment'])
 
             if itype == 0: # double
-                uf.write(struct.pack('d', self[i]['value']))
+                uf.write(struct.pack('d', val['value']))
             elif itype == 1: # char
                 raise Exception('Hitem: char not enabled')
             elif itype == 2: # int
-                uf.write(struct.pack('i', self[i]['value']))
+                uf.write(struct.pack('i', val['value']))
             elif itype == 3: # uint
                 raise Exception('Hitem: uint not enabled')
             elif itype == 4: # lint
@@ -90,23 +104,24 @@ class Ucm(list):
             elif itype == 5: # ulint
                 raise Exception('Hitem: ulint not enabled')
             elif itype == 6: # float
-                uf.write(struct.pack('f', self[i]['value']))
+                uf.write(struct.pack('f', val['value']))
             elif itype == 7: # string
-                write_binary_string(uf, self[i]['value'])
+                write_binary_string(uf, val['value'])
             elif itype == 8: # bool
-                uf.write(struct.pack('B', self[i]['value']))
+                uf.write(struct.pack('B', val['value']))
             elif itype == 9: # directory
                 pass
             elif itype == 10: # date
                 raise Exception('Hitem: date not enabled')
             elif itype == 11: # time
-                uf.write(struct.pack('id', self[i]['value'][0], self[i]['value'][1]))
+                uf.write(struct.pack('i', val['value'][0]))
+                uf.write(struct.pack('d', val['value'][1]))
             elif itype == 12: # position
                 raise Exception('Hitem: position not enabled')
             elif itype == 13: # dvector
                 raise Exception('Hitem: dvector not enabled')
             elif itype == 14: # uchar
-                uf.write(struct.pack('c', self[i]['value']))
+                uf.write(struct.pack('c', val['value']))
             elif itype == 15: # telescope
                 raise Exception('Hitem: telescope not enabled')
 
@@ -121,8 +136,8 @@ class Ucm(list):
             uf.write(struct.pack('i', nwin))
 
             for nw in range(nwin):
-                llx     = self.off[nc][nw]['llx']
-                lly     = self.off[nc][nw]['lly']
+                llx     = self.off[nc][nw][0]
+                lly     = self.off[nc][nw][1]
                 (ny,nx) = self.data[nc][nw].shape
                 xbin    = self.xbin
                 ybin    = self.ybin
@@ -170,10 +185,10 @@ class Ucm(list):
         for nw in xrange(len(self.data[nccd])):
             (ny,nx) = self.data[nccd][nw].shape
             tr = numpy.empty((6),float)
-            tr[0] = self.off[nccd][nw]['llx']-1
+            tr[0] = self.off[nccd][nw][0]-1
             tr[1] = self.xbin
             tr[2] = 0.
-            tr[3] = self.off[nccd][nw]['lly']-1
+            tr[3] = self.off[nccd][nw][1]-1
             tr[4] = 0.
             tr[5] = self.ybin
             ppgplot.pggray(self.data[nccd][nw], nx, ny, 0, nx-1, 0, ny-1, imin, imax, tr)
@@ -225,7 +240,7 @@ def rucm(fname):
 # read the header
     (lmap,) = struct.unpack(start_format + 'i', uf.read(4))
 
-    head = []
+    head = subs.Odict()
     for i in xrange(lmap):
         name = read_binary_string(uf, start_format)
         (itype,) = struct.unpack(start_format + 'i', uf.read(4))
@@ -267,9 +282,8 @@ def rucm(fname):
             raise Exception('Hitem: telescope not enabled')
 
 # store header information
-        head.append({'name' : name, 'value' : value, 'comment' : comment, 'type' : itype})
+        head[name] = {'value' : value, 'comment' : comment, 'type' : itype}
         
-
 # now for the data
     data  = []
     off   = []
@@ -294,7 +308,7 @@ def rucm(fname):
                 raise Exception('Ultracam data output type iout = ' + str(iout) + ' not recognised')
             win = win.reshape((ny,nx))
             ccd.append(win)
-            coff.append({'llx' : llx, 'lly' : lly})
+            coff.append((llx, lly))
 
         data.append(ccd)
         off.append(coff)
