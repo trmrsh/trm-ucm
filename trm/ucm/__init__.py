@@ -86,10 +86,10 @@ class Ucm(subs.Odict):
 
         for (key,val) in self.iteritems():
 
-            write_binary_string(uf, key)
+            subs.write_string(uf, key)
             itype = val['type']
             uf.write(struct.pack('i',itype))
-            write_binary_string(uf, val['comment'])
+            subs.write_string(uf, val['comment'])
 
             if itype == 0: # double
                 uf.write(struct.pack('d', val['value']))
@@ -106,7 +106,7 @@ class Ucm(subs.Odict):
             elif itype == 6: # float
                 uf.write(struct.pack('f', val['value']))
             elif itype == 7: # string
-                write_binary_string(uf, val['value'])
+                subs.write_string(uf, val['value'])
             elif itype == 8: # bool
                 uf.write(struct.pack('B', val['value']))
             elif itype == 9: # directory
@@ -194,27 +194,6 @@ class Ucm(subs.Odict):
             ppgplot.pggray(self.data[nccd][nw], nx, ny, 0, nx-1, 0, ny-1, imin, imax, tr)
 
 
-def read_binary_string(fobj, start_format):
-    """
-    Reads a string written in binary format by my C++ code
-
-    fobj         -- file object opened for binary input
-    start_format -- starting format. '>' for big-endian, '' for little-endian.
-    """
-    (nchar,)  = struct.unpack(start_format + 'i', fobj.read(4))
-    (string,) = struct.unpack(start_format + str(nchar) + 's', fobj.read(nchar))
-    return string
-
-def write_binary_string(fobj, strng):
-    """
-    Writes a string in binary format for my C++ code
-
-    fobj         -- file object opened for binary output
-    strng        -- string to file object opened for binary output
-    """
-    nchar = len(strng)
-    fobj.write(struct.pack('i' + str(nchar) + 's',nchar, strng)) 
-
 def rucm(fname):
     """
     Read from disk in ucm format
@@ -242,9 +221,9 @@ def rucm(fname):
 
     head = subs.Odict()
     for i in xrange(lmap):
-        name = read_binary_string(uf, start_format)
+        name = subs.read_string(uf, start_format)
         (itype,) = struct.unpack(start_format + 'i', uf.read(4))
-        comment = read_binary_string(uf, start_format)
+        comment = subs.read_string(uf, start_format)
 
         if itype == 0: # double
             (value,) = struct.unpack(start_format + 'd', uf.read(8))
@@ -261,7 +240,7 @@ def rucm(fname):
         elif itype == 6: # float
             (value,) = struct.unpack(start_format + 'f', uf.read(4))
         elif itype == 7: # string
-            value = read_binary_string(uf, start_format)
+            value = subs.read_string(uf, start_format)
         elif itype == 8: # bool
             (value,) = struct.unpack(start_format + 'B', uf.read(1))
         elif itype == 9: # directory
