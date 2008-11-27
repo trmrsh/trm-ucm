@@ -201,20 +201,7 @@ def rucm(fname):
     fname  -- file to write to.
     """    
 
-    uf = open(fname, 'rb')
-    
-# read the format code
-    fbytes = uf.read(4)
-    magic = 47561009
-
-    (fcode,) = struct.unpack('i',fbytes)
-    if fcode != magic:
-        (fcode,) = struct.unpack('>i',fbytes)
-        if fcode != magic:
-            raise Exception('Could not recognise first 4 bytes as a ucm file')
-        start_format = '>'
-    else:
-        start_format = ''
+    (uf,start_format) = subs.open_ucm(fname)
 
 # read the header
     (lmap,) = struct.unpack(start_format + 'i', uf.read(4))
