@@ -9,6 +9,7 @@ import struct
 import numpy
 import ppgplot
 import trm.subs as subs
+import trm.subs.cpp as cpp
 
 class Ucm(subs.Odict):
 
@@ -86,10 +87,10 @@ class Ucm(subs.Odict):
 
         for (key,val) in self.iteritems():
 
-            subs.write_string(uf, key)
+            cpp.write_string(uf, key)
             itype = val['type']
             uf.write(struct.pack('i',itype))
-            subs.write_string(uf, val['comment'])
+            cpp.write_string(uf, val['comment'])
 
             if itype == 0: # double
                 uf.write(struct.pack('d', val['value']))
@@ -106,7 +107,7 @@ class Ucm(subs.Odict):
             elif itype == 6: # float
                 uf.write(struct.pack('f', val['value']))
             elif itype == 7: # string
-                subs.write_string(uf, val['value'])
+                cpp.write_string(uf, val['value'])
             elif itype == 8: # bool
                 uf.write(struct.pack('B', val['value']))
             elif itype == 9: # directory
@@ -201,16 +202,16 @@ def rucm(fname):
     fname  -- file to write to.
     """    
 
-    (uf,start_format) = subs.open_ucm(fname)
+    (uf,start_format) = cpp.open_ucm(fname)
 
 # read the header
     (lmap,) = struct.unpack(start_format + 'i', uf.read(4))
 
     head = subs.Odict()
     for i in xrange(lmap):
-        name = subs.read_string(uf, start_format)
+        name = cpp.read_string(uf, start_format)
         (itype,) = struct.unpack(start_format + 'i', uf.read(4))
-        comment = subs.read_string(uf, start_format)
+        comment = cpp.read_string(uf, start_format)
 
         if itype == 0: # double
             (value,) = struct.unpack(start_format + 'd', uf.read(8))
@@ -227,7 +228,7 @@ def rucm(fname):
         elif itype == 6: # float
             (value,) = struct.unpack(start_format + 'f', uf.read(4))
         elif itype == 7: # string
-            value = subs.read_string(uf, start_format)
+            value = cpp.read_string(uf, start_format)
         elif itype == 8: # bool
             (value,) = struct.unpack(start_format + 'B', uf.read(1))
         elif itype == 9: # directory
