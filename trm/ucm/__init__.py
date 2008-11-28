@@ -1,7 +1,46 @@
 #!/usr/bin/env python
 
 """
-trm.ucm is a module to read and write ultracam ucm files
+enables python access to ultracam ucm files
+
+ULTRACAM stores frames in its own native binary format, which present a
+high hurdle for one-off manipulations. This module allows you to read 
+ULTRACAM frames into python where you can use standard python code to do 
+what you want to the data and headers.
+
+The headers are stored in an ordered dictionary keyed on the header parameter
+name. Each parameter has a value, a comment and a type. The types refer to 
+particular C++ data types and you are better off not changing them if possible.
+
+example:
+
+import trm.ucm
+
+# read image
+ucm = trm.ucm.rucm('image.ucm')
+
+# subtract 10. from 2nd window of 3rd CCD
+ucm[2][1] -= 10.
+
+# dump result
+ucm.write('image_new.ucm')
+
+
+Classes
+=======
+
+Ucm     -- class to contain a ucm frame (multiple windows of multiple CCDs)
+
+Functions
+=========
+
+rucm    -- read a ucm file and create a Ucm object
+
+Dependencies
+============
+
+You must already have the trm.subs module.
+
 """
 
 import sys
