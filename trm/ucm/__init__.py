@@ -49,6 +49,7 @@ Functions
 
 open_ucm  -- opens a ucm file, works out endianness
 rucm      -- read a ucm file and create a Ucm object
+match     -- checks that two ucm files have matching formats
 
 Dependencies
 ============
@@ -82,6 +83,8 @@ ITYPE_DVECTOR   = 13
 ITYPE_UCHAR     = 14
 ITYPE_TELESCOPE = 15
 ITYPE_USINT     = 16
+ITYPE_IVECTOR   = 17
+ITYPE_FVECTOR   = 18
 
 def open_ucm(fname):
     """
@@ -163,6 +166,56 @@ class Ucm(subs.Odict):
         self.nxtot = nxtot
         self.nytot = nytot
 
+    def __eq__(self, other):
+        """
+        Equality operator based on file formats: same number of CCDs,
+        same number of windows per CCD, sqame binning factors etc. 
+        """
+
+        if type(other) is type(self):
+
+            if self.nccd() != other.nccd(): return False
+            if self.xbin != other.xbin or self.ybin != other.ybin: return False
+            if self.nxtot != other.nxtot or self.nytot != other.nytot: return False
+            for nc in range(self.nccd()):
+                if self.nwin(nc) != other.nwin(nc): return False
+                for nw in range(self.nwin(nc)):
+                    (ny1,nx1) = self.nxy(nc,nw)
+                    (ny2,nx2) = other.nxy(nc,nw)
+                    if nx1 != nx2 or ny1 != ny2: return False
+                    (llx1,lly1) = self.off[nc][nw]
+                    (llx2,lly2) = other.off[nc][nw]
+                    if llx1 != llx2 or lly1 != lly2: return False
+            return True
+        else:
+            return NotImplemented
+
+    def __ne__(self, other):
+        """
+        Inequality operator based on file formats: same number of CCDs,
+        same number of windows per CCD, sqame binning factors etc. 
+        """
+        result = self.__eq__(other)
+        if result is NotImplemented:
+            return result
+        return not result
+
+    def nccd(self):
+        "Returns number of CCDs"
+        return len(self.data)
+
+    def nwin(self, nc):
+        "Returns number of windowsn of CCD nc (starting from 0)"
+        return len(self.data[nc])
+
+    def win(self, nc, nw):
+        "Returns window number nw of CCD nc (starting from 0)"
+        return self.data[nc][nw]
+
+    def nxy(self, nc, nw):
+        "Returns (ny,nx) tuple of pixels dimensions of window number nw of CCD nc (starting from 0)"
+        return self.win(nc,nw).shape
+
     def write(self, fname):
         """
         Writes out to disk in ucm format
@@ -187,41 +240,48 @@ class Ucm(subs.Odict):
             uf.write(struct.pack('i',itype))
             cpp.write_string(uf, val['comment'])
 
-            if itype == ITYPE_DOUBLE: # double
+            if itype == ITYPE_DOUBLE:
                 uf.write(struct.pack('d', val['value']))
-            elif itype == ITYPE_CHAR: # char
+            elif itype == ITYPE_CHAR:
                 raise Exception('Hitem: char not enabled')
-            elif itype == ITYPE_INT: # int
+            elif itype == ITYPE_INT:
                 uf.write(struct.pack('i', val['value']))
-            elif itype == ITYPE_UINT: # uint
-                raise Exception('Hitem: uint not enabled')
-            elif itype == ITYPE_LINT: # lint
+            elif itype == ITYPE_UINT:
+                uf.write(struct.pack('I', val['value']))
+            elif itype == ITYPE_LINT:
                 raise Exception('Hitem: linit not enabled')
-            elif itype == ITYPE_ULINT: # ulint
+            elif itype == ITYPE_ULINT:
                 raise Exception('Hitem: ulint not enabled')
-            elif itype == ITYPE_FLOAT: # float
+            elif itype == ITYPE_FLOAT:
                 uf.write(struct.pack('f', val['value']))
-            elif itype == ITYPE_STRING: # string
+            elif itype == ITYPE_STRING:
                 cpp.write_string(uf, val['value'])
-            elif itype == ITYPE_BOOL: # bool
+            elif itype == ITYPE_BOOL:
                 uf.write(struct.pack('B', val['value']))
-            elif itype == ITYPE_DIR: # directory
+            elif itype == ITYPE_DIR:
                 pass
-            elif itype == ITYPE_DATE: # date
+            elif itype == ITYPE_DATE:
                 raise Exception('Hitem: date not enabled')
-            elif itype == ITYPE_TIME: # time
+            elif itype == ITYPE_TIME:
                 uf.write(struct.pack('i', val['value'][0]))
                 uf.write(struct.pack('d', val['value'][1]))
-            elif itype == ITYPE_POSITION: # position
+            elif itype == ITYPE_POSITION:
                 raise Exception('Hitem: position not enabled')
-            elif itype == ITYPE_DVECTOR: # dvector
-                raise Exception('Hitem: dvector not enabled')
-            elif itype == ITYPE_UCHAR: # uchar
+            elif itype == ITYPE_DVECTOR:
+                uf.write(struct.pack('i', len(val['value'])))
+                uf.write(struct.pack(str(len(value))+'d', *val['value']))
+            elif itype == ITYPE_UCHAR:
                 uf.write(struct.pack('c', val['value']))
-            elif itype == ITYPE_TELESCOPE: # telescope
+            elif itype == ITYPE_TELESCOPE:
                 raise Exception('Hitem: telescope not enabled')
-            elif itype == ITYPE_USINT: # unsigned short int
+            elif itype == ITYPE_USINT:
                 uf.write(struct.pack('H', val['value']))
+            elif itype == ITYPE_IVECTOR:
+                uf.write(struct.pack('i', len(val['value'])))
+                uf.write(struct.pack(str(len(value))+'i', *val['value']))
+            elif itype == ITYPE_FVECTOR:
+                uf.write(struct.pack('i', len(val['value'])))
+                uf.write(struct.pack(str(len(value))+'f', *val['value']))
             else:
                 raise Exception('Hitem: type =' + str(itype) + 'not recognised')
 
@@ -312,42 +372,49 @@ def rucm(fname):
         (itype,) = struct.unpack(start_format + 'i', uf.read(4))
         comment = cpp.read_string(uf, start_format)
 
-        if itype == ITYPE_DOUBLE: # double
+        if itype == ITYPE_DOUBLE:
             (value,) = struct.unpack(start_format + 'd', uf.read(8))
-        elif itype == ITYPE_CHAR: # char
+        elif itype == ITYPE_CHAR:
             raise Exception('Hitem: char not enabled')
-        elif itype == ITYPE_INT: # int
+        elif itype == ITYPE_INT:
             (value,) = struct.unpack(start_format + 'i', uf.read(4))
-        elif itype == ITYPE_UINT: # uint
-            raise Exception('Hitem: uint not enabled')
-        elif itype == ITYPE_LINT: # lint
+        elif itype == ITYPE_UINT:
+            (value,) = struct.unpack(start_format + 'I', uf.read(4))
+        elif itype == ITYPE_LINT:
             raise Exception('Hitem: linit not enabled')
-        elif itype == ITYPE_ULINT: # ulint
+        elif itype == ITYPE_ULINT:
             raise Exception('Hitem: ulint not enabled')
-        elif itype == ITYPE_FLOAT: # float
+        elif itype == ITYPE_FLOAT:
             (value,) = struct.unpack(start_format + 'f', uf.read(4))
-        elif itype == ITYPE_STRING: # string
+        elif itype == ITYPE_STRING:
             value = cpp.read_string(uf, start_format)
-        elif itype == ITYPE_BOOL: # bool
+        elif itype == ITYPE_BOOL:
             (value,) = struct.unpack(start_format + 'B', uf.read(1))
-        elif itype == ITYPE_DIR: # directory
+        elif itype == ITYPE_DIR:
             value = None
-        elif itype == ITYPE_DATE: # date
+        elif itype == ITYPE_DATE:
             raise Exception('Hitem: date not enabled')
-        elif itype == ITYPE_TIME: # time
+        elif itype == ITYPE_TIME:
             (mjd,)  = struct.unpack(start_format + 'i', uf.read(4))
             (hour,) = struct.unpack(start_format + 'd', uf.read(8))
             value   = (mjd, hour)
-        elif itype == ITYPE_POSITION: # position
+        elif itype == ITYPE_POSITION:
             raise Exception('Hitem: position not enabled')
-        elif itype == ITYPE_DVECTOR: # dvector
-            raise Exception('Hitem: dvector not enabled')
-        elif itype == ITYPE_UCHAR: # uchar
+        elif itype == ITYPE_DVECTOR:
+            (nvec,) = struct.unpack(start_format + 'i', uf.read(4))
+            value = struct.unpack(start_format + str(nvec) + 'd', uf.read(8*nvec))
+        elif itype == ITYPE_UCHAR:
             (value,) = struct.unpack(start_format + 'c', uf.read(1))
         elif itype == ITYPE_TELESCOPE: # telescope
             raise Exception('Hitem: telescope not enabled')
-        elif itype == ITYPE_USINT: # unsigned short int
+        elif itype == ITYPE_USINT:
             (value,) = struct.unpack(start_format + 'H', uf.read(2))
+        elif itype == ITYPE_IVECTOR:
+            (nvec,) = struct.unpack(start_format + 'i', uf.read(4))
+            value = struct.unpack(start_format + str(nvec) + 'i', uf.read(8*nvec))
+        elif itype == ITYPE_FVECTOR:
+            (nvec,) = struct.unpack(start_format + 'i', uf.read(4))
+            value = struct.unpack(start_format + str(nvec) + 'f', uf.read(8*nvec))
 
 # store header information
         head[name] = {'value' : value, 'comment' : comment, 'type' : itype}
@@ -383,6 +450,8 @@ def rucm(fname):
     uf.close()
 
     return Ucm(head, data, off, xbin, ybin, nxtot, nytot)
+
+
 
 # Test section if this is run as a script
 
