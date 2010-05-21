@@ -1,6 +1,0 @@
-setup.py
-scripts/pucm
-scripts/snorm
-trm/__init__.py
-trm/ucm/__init__.py
-trm/ucm/ucm_core.py
