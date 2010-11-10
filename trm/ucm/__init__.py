@@ -220,9 +220,11 @@ class Ucm(subs.Odict):
         """
         Writes out to disk in ucm format
 
-        fname  -- file to write to.
+        fname  -- file to write to. '.ucm' will be appended if necessary.
         """    
 
+        if not fname.strip().endswith('.ucm'):
+            fname = fname.strip() + '.ucm'
         uf = open(fname, 'wb')
     
 # write the format code
@@ -269,7 +271,7 @@ class Ucm(subs.Odict):
                 raise Exception('Hitem: position not enabled')
             elif itype == ITYPE_DVECTOR:
                 uf.write(struct.pack('i', len(val['value'])))
-                uf.write(struct.pack(str(len(value))+'d', *val['value']))
+                uf.write(struct.pack(str(len(val['value']))+'d', *val['value']))
             elif itype == ITYPE_UCHAR:
                 uf.write(struct.pack('c', val['value']))
             elif itype == ITYPE_TELESCOPE:
@@ -278,10 +280,10 @@ class Ucm(subs.Odict):
                 uf.write(struct.pack('H', val['value']))
             elif itype == ITYPE_IVECTOR:
                 uf.write(struct.pack('i', len(val['value'])))
-                uf.write(struct.pack(str(len(value))+'i', *val['value']))
+                uf.write(struct.pack(str(len(val['value']))+'i', *val['value']))
             elif itype == ITYPE_FVECTOR:
                 uf.write(struct.pack('i', len(val['value'])))
-                uf.write(struct.pack(str(len(value))+'f', *val['value']))
+                uf.write(struct.pack(str(len(val['value']))+'f', *val['value']))
             else:
                 raise Exception('Hitem: type =' + str(itype) + 'not recognised')
 
@@ -358,9 +360,11 @@ def rucm(fname):
     """
     Read from disk in ucm format
 
-    fname  -- file to read from
+    fname  -- file to read from. '.ucm' will be appended if necessary.
     """    
 
+    if not fname.strip().endswith('.ucm'):
+        fname = fname.strip() + '.ucm'
     (uf,start_format) = open_ucm(fname)
 
 # read the header
