@@ -47,9 +47,7 @@ Ucm     -- class to contain a ucm frame (multiple windows of multiple CCDs)
 Functions
 =========
 
-open_ucm  -- opens a ucm file, works out endianness
-rucm      -- read a ucm file and create a Ucm object
-match     -- checks that two ucm files have matching formats
+rucm      -- read a ucm file and return a Ucm object
 
 Dependencies
 ============
@@ -86,7 +84,7 @@ ITYPE_USINT     = 16
 ITYPE_IVECTOR   = 17
 ITYPE_FVECTOR   = 18
 
-def open_ucm(fname):
+def _open_ucm(fname):
     """
     Opens a ucm file for reading and returns a file object
 
@@ -103,7 +101,7 @@ def open_ucm(fname):
         (fcode,) = struct.unpack('>i',fbytes)
         if fcode != MAGIC:
             fobj.close()
-            raise CppError('open_ucm: could not recognise first 4 bytes of ' + fname + ' as a ucm file')
+            raise CppError('_open_ucm: could not recognise first 4 bytes of ' + fname + ' as a ucm file')
         endian = '>'
     else:
         endian = ''
@@ -193,7 +191,7 @@ class Ucm(subs.Odict):
     def __ne__(self, other):
         """
         Inequality operator based on file formats: same number of CCDs,
-        same number of windows per CCD, sqame binning factors etc. 
+        same number of windows per CCD, same binning factors etc. 
         """
         result = self.__eq__(other)
         if result is NotImplemented:
@@ -365,7 +363,7 @@ def rucm(fname):
 
     if not fname.strip().endswith('.ucm'):
         fname = fname.strip() + '.ucm'
-    (uf,start_format) = open_ucm(fname)
+    (uf,start_format) = _open_ucm(fname)
 
 # read the header
     (lmap,) = struct.unpack(start_format + 'i', uf.read(4))
