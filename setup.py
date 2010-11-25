@@ -1,7 +1,13 @@
 from distutils.core import setup, Extension
-import os
+from distutils.command.sdist import sdist as _sdist
 
 """Setup script for Python module for ucm files"""
+
+try:
+    from sdist import sdist
+    cmdclass = {'sdist': sdist}
+except:
+    cmdclass = {}
 
 setup(name='trm.ucm',
       version='0.3',
@@ -12,6 +18,6 @@ setup(name='trm.ucm',
       description="Python module for reading/writing ucm files",
       author_email='t.r.marsh@warwick.ac.uk',
       url='http://www.astro.warwick.ac.uk/',
-
+      cmdclass = cmdclass
       )
 
