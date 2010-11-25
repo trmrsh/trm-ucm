@@ -4,7 +4,7 @@ import os
 """Setup script for Python module for ucm files"""
 
 setup(name='trm.ucm',
-      version='0.2',
+      version='0.3',
       packages = ['trm', 'trm.ucm'],
       scripts=['scripts/pucm', 'scripts/snorm'],
 
