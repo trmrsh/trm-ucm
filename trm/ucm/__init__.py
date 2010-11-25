@@ -356,7 +356,7 @@ class Ucm(subs.Odict):
 
 def rucm(fname):
     """
-    Read from disk in ucm format
+    Read from disk in ucm format, return as a Ucm object
 
     fname  -- file to read from. '.ucm' will be appended if necessary.
     """    
