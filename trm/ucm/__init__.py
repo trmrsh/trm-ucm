@@ -56,10 +56,7 @@ You must already have the trm.subs module.
 
 """
 
-import sys
-import struct
-import numpy
-import ppgplot
+import sys, struct, numpy, ppgplot
 import trm.subs as subs
 import trm.subs.cpp as cpp
 
