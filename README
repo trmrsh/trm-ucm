@@ -2,16 +2,14 @@
 'trm.ucm' is a Python module for reading, writing and modifying
 Ultracam ucm files.
 
-Look in 'scripts' for some example scripts. This is a beta version 
-and there may well be changes in the future, in particular to the 
-currently crude way the headers are handled.
+Look in 'scripts' for some example scripts. If you have not used this 
+before, DON'T -- it has been superceded by trm.ultracam
 
-Installation:
+For installation you need numpy, ppgplot (my version from:
 
-As well as standard Python, you need 'numpy' (http://numpy.scipy.org/),
-'ppgplot' and another Python pacakage of mine, trm.subs. ppgplot seems
-difficult to get hold of so I have made copy available which can be downloaded
-from http://deneb.astro.warwick.ac.uk/phsaap/software/ppgplot-0.99.tar.gz
+ http://deneb.astro.warwick.ac.uk/phsaap/software/ppgplot-0.99.tar.gz
+
+and trm.subs, another of my python packages.
 
 Once everything is ready, install with the usual
 
