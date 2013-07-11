@@ -10,7 +10,7 @@ except:
     cmdclass = {}
 
 setup(name='trm.ucm',
-      version='0.3',
+      version='0.9',
       packages = ['trm', 'trm.ucm'],
       scripts=['scripts/pucm', 'scripts/snorm'],
 
