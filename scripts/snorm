@@ -51,7 +51,7 @@ if not iname.endswith('.ucm'):
     iname = iname + '.ucm'
 
 # read file
-iflat = trm.ucm.rucm(iname)
+iflat = trm.ucm.Ucm(iname)
 if nccd > len(iflat.data):
     print 'Error: only ' + str(len(iflat.data)) + ' CCDs found in ' + iname
     exit(1)
