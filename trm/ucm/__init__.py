@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-enables python access to ultracam ucm files
+enables Python access to ultracam ucm files
 
 ULTRACAM stores frames in its own native binary format, which presents a
 high hurdle for one-off manipulations. This module allows you to read 
@@ -18,7 +18,7 @@ Example:
 import trm.ucm
 
 # read image
-ucm = trm.ucm.rucm('image.ucm')
+ucm = trm.ucm.Ucm('image.ucm')
 
 # subtract 10. from 2nd window of 3rd CCD
 ucm[2][1] -= 10.
@@ -28,7 +28,7 @@ ucm.write('image_new.ucm')
 
 Headers:
 
-The Ucm class is inherited from trm.subs.Odict, so you could set a header item as
+The Ucm class is inherited from trm.subs.Odict, so you could set a new header item as
 follows:
 
 ucm['My.Header.Item'] = {'value' : 23.345, 'comment' : 'a test header item', 'type' : trm.ucm.ITYPE_DOUBLE}
@@ -36,27 +36,28 @@ ucm['My.Header.Item'] = {'value' : 23.345, 'comment' : 'a test header item', 'ty
 The last one tells it what C++ data type to use; see below for a full list but note that not
 all of them have been implemented. The times are a little subtle. You need to provide a 2 element tuple
 with an integer MJD day number and a double representing the hour of the day and this is what you will
-get back if you query a time header parameter (ITYPE_TIME)
+get back if you query a time header parameter (ITYPE_TIME).
 
+Here is how you might set the standard UT_date time used by ULTRACAM:
+
+ucm['UT_date']=  {'comment': 'UT at the centre of the exposure', 'type': trm.ucm.ITYPE_TIME, 'value': (53592, 2.5800921733025461)}
 
 Classes
 =======
 
-Ucm     -- class to contain a ucm frame (multiple windows of multiple CCDs)
+Ucm     -- a class to contain a ucm frame (multiple windows of multiple CCDs)
+Pgucm   -- a class derived from Ucm that knows to plot itself with PGPLOT
+Mpucm   -- a class derived from Ucm that knows to plot itself with matplotlib
 
-Functions
-=========
+Third-party dependencies
+========================
 
-rucm      -- read a ucm file and return a Ucm object
-
-Dependencies
-============
-
-You must already have the trm.subs module.
+You must already have numpy (fairly standard) and my trm.subs module. matplotlib and ppgplot are needed
+if you wish to use the plottable objects Mpucm and Pgucm, but not otherwise.
 
 """
 
-import sys, struct, numpy, ppgplot
+import os.path, sys, struct, numpy
 import trm.subs as subs
 import trm.subs.cpp as cpp
 
@@ -81,15 +82,16 @@ ITYPE_USINT     = 16
 ITYPE_IVECTOR   = 17
 ITYPE_FVECTOR   = 18
 
-def _open_ucm(fname):
-    """
-    Opens a ucm file for reading and returns a file object
+# ucm magic number
+MAGIC           = 47561009
 
-    Returns (fobj,endian) where fobj is the file object and endian is a string to be passed
-    to later routines indicating endian-ness
+def _check_ucm(fobj):
     """
-    MAGIC = 47561009
-    fobj = open(fname, 'rb')
+    Check a file opened for reading in binary mode to see if it is a ucm.
+
+    Returns endian which is a string to be passed
+    to later routines indicating endian-ness. 
+    """
 
     # read the format code
     fbytes = fobj.read(4)
@@ -102,7 +104,8 @@ def _open_ucm(fname):
         endian = '>'
     else:
         endian = ''
-    return (fobj,endian)
+    return endian
+
 
 class Ucm(subs.Odict):
 
@@ -124,36 +127,65 @@ class Ucm(subs.Odict):
 
     Ucm objects have the following attributes:
 
-    data  -- the data. data[nc][nw] is a 2D numpy array representing window nw of CCD nc (both starting
-             from zero, C-style).
-    off   -- window offsets. off[nc][nw] returns a tuple (llx,lly) representing the lower-left pixel position.
-             of the respective window.
-    xbin  -- X binning factor
-    ybin  -- Y binning factor
-    nxtot -- maximum X pixel
-    nytot -- maximum Y pixel.
+     data  -- the data. data[nc][nw] is a 2D numpy array representing window nw of CCD nc (both starting
+              from zero, C-style).
+     off   -- window offsets. off[nc][nw] returns a tuple (llx,lly) representing the lower-left pixel position.
+              of the respective window.
+     xbin  -- X binning factor
+     ybin  -- Y binning factor
+     nxtot -- maximum X pixel
+     nytot -- maximum Y pixel.
+
+    They have been kept deliberately simple otherwise and don't have much functionality.
     """
 
-    def __init__(self, head, data, off, xbin, ybin, nxtot, nytot):
+    def __init__(self, *args):
         """
         Creates a Ucm file
 
-        head  -- the header, a list with each entry a dictionary with the format
-                 {'name' : name, 'value' : value, 'comment' : comment, 'type' : itype}
-        data  -- list of list of numpy 2D arrays so that data[nc][nw] represents
-                 window nw of CCD nc
-        off   -- list of list of tuples such that off[nc][nw] has the form (llx,lly)
-        xbin  -- x binning factor
-        ybin  -- y binning factor
-        nxtot -- maximum X dimension
-        nytot -- maximum Y dimension
+        Two ways to call:
+
+        One argument:
+
+          fnoro -- reads in from a file name or a file object
+
+        Seven arguments:
+
+          head  -- the header, an ordered dictionary keyed on the header name with each entry 
+                   being a dictionary with the format:
+
+                   {'value' : value, 'comment' : comment, 'type' : itype}
+
+                   The name can be made hierarchical by using '.'. e.g. entries with
+                   names 'Detector', 'Detector.Name' and 'Detector.Type' would create
+                   a directory and two sub-items in uinfo.
+
+          data  -- list of list of numpy 2D arrays so that data[nc][nw] represents
+                   window nw of CCD nc
+
+          off   -- list of list of tuples such that off[nc][nw] has the form (llx,lly)
+
+          xbin  -- x binning factor
+
+          ybin  -- y binning factor
+
+          nxtot -- maximum X dimension
+
+          nytot -- maximum Y dimension
         """
 
-        if head == None:
-            super(Ucm, self)
+        if len(args) == 1:
+            head, data, off, xbin, ybin, nxtot, nytot = _rucm(args[0])
+        elif len(args) == 7:
+            head, data, off, xbin, ybin, nxtot, nytot = args
         else:
-            super(Ucm, self).__init__(head)
+            raise TypeError('ucm.Ucm(): takes 1 or 7 arguments; ' + str(len(args)) + 'were given.')
 
+        if head == None:
+            subs.Odict.__init__(self)
+        else:
+            subs.Odict.__init__(self, head)
+        
         self.data  = data
         self.off   = off
         self.xbin  = xbin
@@ -200,7 +232,7 @@ class Ucm(subs.Odict):
         return len(self.data)
 
     def nwin(self, nc):
-        "Returns number of windowsn of CCD nc (starting from 0)"
+        "Returns number of windows of CCD nc (starting from 0)"
         return len(self.data[nc])
 
     def win(self, nc, nw):
@@ -222,11 +254,10 @@ class Ucm(subs.Odict):
             fname = fname.strip() + '.ucm'
         uf = open(fname, 'wb')
     
-# write the format code
-        magic = 47561009
-        uf.write(struct.pack('i',magic))
+        # write the format code
+        uf.write(struct.pack('i',MAGIC))
 
-# write the header, starting with the number of entries
+        # write the header, starting with the number of entries
         lmap = len(self)
         uf.write(struct.pack('i',lmap))
 
@@ -330,6 +361,19 @@ class Ucm(subs.Odict):
         return mval
 
     def pggray(self, nccd, imin, imax):
+        print "ERROR: Ucm.pggray now deprectaed. Please use Pgucm instead"
+        exit(1)
+
+class Pgucm(Ucm):
+    """
+    Plottable version of a Ucm using pgplot.
+    """
+    import ppgplot
+
+#    def __init__(self, *args):
+#       Ucm.__init__(self, *args)
+        
+    def pggray(self, nccd, imin, imax):
         """
         Plots a CCD using pgplot's pggray function.
 
@@ -339,6 +383,7 @@ class Ucm(subs.Odict):
         imin   -- minimum intensity
         imax   -- maximum intensity
         """
+
         for nw in xrange(len(self.data[nccd])):
             (ny,nx) = self.data[nccd][nw].shape
             tr = numpy.empty((6),float)
@@ -350,19 +395,63 @@ class Ucm(subs.Odict):
             tr[5] = self.ybin
             ppgplot.pggray(self.data[nccd][nw], 0, nx-1, 0, ny-1, imin, imax, tr)
 
-
-def rucm(fname):
+class Mpucm(Ucm):
     """
-    Read from disk in ucm format, return as a Ucm object
+    Plottable version of a Ucm using matplotlib
+    """
 
-    fname  -- file to read from. '.ucm' will be appended if necessary.
+    from matplotlib.pyplot import cm
+
+    def imshow(self, nccd, imin=None, imax=None, cmap=cm.jet):
+        """
+        Plots a CCD using matplotlib's imshow function.
+
+        nccd   -- the CCD to plot (0,1,2 ...)
+        imin   -- minimum intensity (default = minimum of image)
+        imax   -- maximum intensity (default = maximum of image)
+        cmap   -- colour map (defaults to cm.jet)
+        """
+
+        import matplotlib.pyplot as plt
+
+        if imin is None:
+            imin = self.min(nccd)
+        if imax is None:
+            imax = self.max(nccd)
+        for nw in xrange(len(self.data[nccd])):
+            ny,nx   = self.data[nccd][nw].shape
+            llx,lly = self.off[nccd][nw]
+            plt.imshow(self.data[nccd][nw], cmap, origin='lower', interpolation='nearest', \
+                           extent=(llx-0.5,llx+nx-0.5,lly-0.5,lly+ny-0.5),vmin=imin,vmax=imax)
+        plt.xlim(0.,self.nxtot)
+        plt.ylim(0.,self.nytot)
+
+
+def rucm(dummy):
+    print 'ucm.rucm now deprecated. Please use Ucm constructors.'
+    exit(1)
+
+def _rucm(fnoro):
+    """
+    Read ucm file from disk
+
+    fnoro  -- either a string containing the name of the file to read from ('.ucm' 
+              will be appended if necessary), or a file object opened for reading
+              in binary mode. The file is closed on exiting the routine.
+
+    Returns head, data, off, xbin, ybin, nxtot, nytot as needed to construct a Ucm
     """    
 
-    if not fname.strip().endswith('.ucm'):
-        fname = fname.strip() + '.ucm'
-    (uf,start_format) = _open_ucm(fname)
+    # Assume it is a file object, if that fails, assume it is
+    # the name of a file.
+    try:
+        uf = fnoro
+        start_format =  _check_ucm(uf)
+    except AttributeError, err:
+        uf = open(fnoro, 'rb')
+        start_format =  _check_ucm(uf)
 
-# read the header
+    # read the header
     (lmap,) = struct.unpack(start_format + 'i', uf.read(4))
 
     head = subs.Odict()
@@ -410,23 +499,23 @@ def rucm(fname):
             (value,) = struct.unpack(start_format + 'H', uf.read(2))
         elif itype == ITYPE_IVECTOR:
             (nvec,) = struct.unpack(start_format + 'i', uf.read(4))
-            value = struct.unpack(start_format + str(nvec) + 'i', uf.read(8*nvec))
+            value = struct.unpack(start_format + str(nvec) + 'i', uf.read(4*nvec))
         elif itype == ITYPE_FVECTOR:
             (nvec,) = struct.unpack(start_format + 'i', uf.read(4))
-            value = struct.unpack(start_format + str(nvec) + 'f', uf.read(8*nvec))
+            value = struct.unpack(start_format + str(nvec) + 'f', uf.read(4*nvec))
 
-# store header information
+        # store header information
         head[name] = {'value' : value, 'comment' : comment, 'type' : itype}
         
-# now for the data
+    # now for the data
     data  = []
     off   = []
         
-# read number of CCDs
+    # read number of CCDs
     (nccd,) = struct.unpack(start_format + 'i', uf.read(4))
 
     for nc in range(nccd):
-# read number of wndows
+        # read number of wndows
         (nwin,) = struct.unpack(start_format + 'i', uf.read(4))
         ccd  = []
         coff = []
@@ -448,7 +537,7 @@ def rucm(fname):
         off.append(coff)
     uf.close()
 
-    return Ucm(head, data, off, xbin, ybin, nxtot, nytot)
+    return head, data, off, xbin, ybin, nxtot, nytot
 
 
 
