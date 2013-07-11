@@ -12,7 +12,7 @@
 
 import sys
 from ppgplot import *
-import trm.ucm
+from trm import ucm
 
 # get inputs
 
@@ -39,9 +39,9 @@ if not fname.endswith('.ucm'):
     fname = fname + '.ucm'
 
 # read file
-ucm = trm.ucm.rucm(fname)
-if nccd > len(ucm.data):
-    print 'Error: only ' + str(len(ucm.data)) + ' CCDs found in ' + fname
+ucmf = ucm.Pgucm(fname)
+if nccd > len(ucmf.data):
+    print 'Error: only ' + str(len(ucmf.data)) + ' CCDs found in ' + fname
     exit(1)
 
 # convert to C-style 0-at-start
@@ -50,8 +50,8 @@ nccd -= 1
 # plot
 pgopen(device)
 pgvstd()
-pgwnad(0.5,ucm.nxtot+0.5,0.5,ucm.nytot+0.5)
-ucm.pggray(nccd, ucm.max(nccd), ucm.min(nccd))
+pgwnad(0.5,ucmf.nxtot+0.5,0.5,ucmf.nytot+0.5)
+ucm.pggray(nccd, ucmf.max(nccd), ucmf.min(nccd))
 pgbox('bcnst',0.,0,'bcnst',0.,0)
 pglab('X pixels','Y pixels',fname)
 pgclos()
